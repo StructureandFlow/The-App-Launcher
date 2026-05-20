@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>App Launcher</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d0d0f;
+      --surface:   #141418;
+      --card:      #1c1c22;
+      --border:    #2a2a35;
+      --accent:    #7c6aff;
+      --accent2:   #ff6a9b;
+      --text:      #e8e8f0;
+      --muted:     #6b6b80;
+      --danger:    #ff4f6a;
+      --radius:    14px;
+      --glow:      0 0 24px rgba(124,106,255,.25);
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      overflow-x: hidden;
+    }
+
+    /* ── Noise texture overlay ── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+      pointer-events: none; z-index: 0;
+    }
+
+    /* ── Layout ── */
+    #app { position: relative; z-index: 1; min-height: 100vh; display: flex; flex-direction: column; }
+
+    header {
+      padding: 28px 32px 20px;
+      display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .logo {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800; font-size: 1.25rem; letter-spacing: -.02em;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .settings-btn {
+      background: var(--card); border: 1px solid var(--border);
+      color: var(--muted); font-family: 'DM Mono', monospace;
+      font-size: .75rem; letter-spacing: .08em;
+      padding: 8px 16px; border-radius: 8px; cursor: pointer;
+      transition: all .2s; text-transform: uppercase;
+    }
+    .settings-btn:hover { color: var(--text); border-color: var(--accent); box-shadow: var(--glow); }
+
+    /* ── Button grid ── */
+    main {
+      flex: 1; padding: 40px 32px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 16px;
+      align-content: start;
+    }
+
+    .app-btn {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 10px; padding: 28px 16px;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); cursor: pointer;
+      text-decoration: none; color: var(--text);
+      transition: transform .18s, border-color .18s, box-shadow .18s;
+      position: relative; overflow: hidden;
+      animation: fadeUp .35s ease both;
+    }
+    .app-btn::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(135deg, rgba(124,106,255,.06), rgba(255,106,155,.04));
+      opacity: 0; transition: opacity .2s;
+    }
+    .app-btn:hover { transform: translateY(-3px); border-color: var(--accent); box-shadow: var(--glow); }
+    .app-btn:hover::before { opacity: 1; }
+    .app-btn:active { transform: translateY(0); }
+
+    .app-icon {
+      width: 48px; height: 48px; border-radius: 12px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.4rem; font-family: 'Syne', sans-serif; font-weight: 800;
+      color: #fff; flex-shrink: 0;
+    }
+
+    .app-label {
+      font-size: .78rem; font-weight: 500; letter-spacing: .04em;
+      text-align: center; word-break: break-word;
+      color: var(--text);
+    }
+
+    /* ── Empty state ── */
+    .empty {
+      grid-column: 1 / -1;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 12px; padding: 80px 20px;
+      color: var(--muted); text-align: center;
+    }
+    .empty .big { font-size: 2.5rem; }
+    .empty p { font-size: .85rem; line-height: 1.7; max-width: 260px; }
+    .empty strong { color: var(--accent); }
+
+    /* ── Modal / Overlay ── */
+    .overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.7); backdrop-filter: blur(6px);
+      z-index: 100; align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    .overlay.open { display: flex; }
+
+    .modal {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 20px; width: 100%; max-width: 480px;
+      max-height: 90vh; display: flex; flex-direction: column;
+      animation: popIn .25s cubic-bezier(.34,1.56,.64,1) both;
+    }
+
+    .modal-header {
+      padding: 24px 28px 0;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .modal-title {
+      font-family: 'Syne', sans-serif; font-weight: 700; font-size: 1.1rem;
+    }
+    .close-btn {
+      background: none; border: none; color: var(--muted);
+      font-size: 1.3rem; cursor: pointer; line-height: 1; padding: 4px;
+      transition: color .15s;
+    }
+    .close-btn:hover { color: var(--danger); }
+
+    .modal-body { padding: 24px 28px; overflow-y: auto; flex: 1; }
+
+    /* ── Form ── */
+    .field { margin-bottom: 18px; }
+    label { display: block; font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 7px; }
+    input[type="text"], input[type="url"] {
+      width: 100%; background: var(--card); border: 1px solid var(--border);
+      border-radius: 10px; color: var(--text);
+      font-family: 'DM Mono', monospace; font-size: .88rem;
+      padding: 12px 14px; outline: none;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,106,255,.15); }
+
+    .hint { font-size: .7rem; color: var(--muted); margin-top: 5px; }
+
+    /* ── Buttons ── */
+    .btn-row { display: flex; gap: 10px; margin-top: 6px; }
+    .btn {
+      flex: 1; padding: 12px; border-radius: 10px; border: none;
+      font-family: 'DM Mono', monospace; font-size: .82rem; font-weight: 500;
+      letter-spacing: .05em; cursor: pointer; transition: all .18s;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #5c4de8);
+      color: #fff;
+    }
+    .btn-primary:hover { box-shadow: var(--glow); transform: translateY(-1px); }
+    .btn-ghost {
+      background: var(--card); border: 1px solid var(--border); color: var(--muted);
+    }
+    .btn-ghost:hover { color: var(--text); border-color: var(--accent); }
+
+    /* ── Button list in settings ── */
+    .btn-list { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+
+    .btn-item {
+      display: flex; align-items: center; gap: 12px;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px 14px;
+    }
+    .btn-item-icon {
+      width: 36px; height: 36px; border-radius: 8px; flex-shrink: 0;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1rem; color: #fff;
+    }
+    .btn-item-info { flex: 1; min-width: 0; }
+    .btn-item-name { font-size: .85rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .btn-item-url { font-size: .7rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .del-btn {
+      background: none; border: none; color: var(--muted);
+      font-size: 1rem; cursor: pointer; padding: 4px 6px;
+      border-radius: 6px; transition: background .15s, color .15s; flex-shrink: 0;
+    }
+    .del-btn:hover { background: rgba(255,79,106,.12); color: var(--danger); }
+
+    /* ── Divider ── */
+    .divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+
+    /* ── Section label ── */
+    .section-label {
+      font-size: .7rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px;
+    }
+
+    /* ── Animations ── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes popIn {
+      from { opacity: 0; transform: scale(.92); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 480px) {
+      header { padding: 20px; }
+      main { padding: 24px 16px; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+      .modal-header, .modal-body { padding-left: 20px; padding-right: 20px; }
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <span class="logo">⚡ Launcher</span>
+    <button class="settings-btn" onclick="openSettings()">⚙ Settings</button>
+  </header>
+
+  <main id="grid">
+    <!-- buttons injected here -->
+  </main>
+</div>
+
+<!-- Settings Modal -->
+<div class="overlay" id="overlay" onclick="handleOverlayClick(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Settings</span>
+      <button class="close-btn" onclick="closeSettings()">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <p class="section-label">Add New Button</p>
+
+      <div class="field">
+        <label for="inp-name">Button Name</label>
+        <input type="text" id="inp-name" placeholder="e.g. YouTube" maxlength="32"/>
+      </div>
+
+      <div class="field">
+        <label for="inp-url">Link / URL</label>
+        <input type="url" id="inp-url" placeholder="https://youtube.com"/>
+        <p class="hint">Must start with https:// or http://</p>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-ghost" onclick="closeSettings()">Cancel</button>
+        <button class="btn btn-primary" onclick="addButton()">Add Button</button>
+      </div>
+
+      <hr class="divider"/>
+
+      <p class="section-label">Your Buttons</p>
+      <div class="btn-list" id="btn-list">
+        <!-- items injected here -->
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  const STORAGE_KEY = 'launcher_buttons';
+
+  /* ── Load / Save ── */
+  function load() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+    catch { return []; }
+  }
+  function save(arr) { localStorage.setItem(STORAGE_KEY, JSON.stringify(arr)); }
+
+  /* ── Render grid ── */
+  function render() {
+    const buttons = load();
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '';
+
+    if (!buttons.length) {
+      grid.innerHTML = `
+        <div class="empty">
+          <span class="big">🚀</span>
+          <p>No apps yet.<br>Open <strong>Settings</strong> to add your first button.</p>
+        </div>`;
+      return;
+    }
+
+    buttons.forEach((btn, i) => {
+      const letter = (btn.name || btn.url).trim().charAt(0).toUpperCase();
+      const a = document.createElement('a');
+      a.className = 'app-btn';
+      a.href = btn.url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.style.animationDelay = (i * 0.04) + 's';
+      a.innerHTML = `
+        <div class="app-icon">${letter}</div>
+        <span class="app-label">${escHtml(btn.name || btn.url)}</span>
+      `;
+      grid.appendChild(a);
+    });
+  }
+
+  /* ── Render list in settings ── */
+  function renderList() {
+    const buttons = load();
+    const list = document.getElementById('btn-list');
+
+    if (!buttons.length) {
+      list.innerHTML = `<p style="color:var(--muted);font-size:.8rem;">No buttons added yet.</p>`;
+      return;
+    }
+
+    list.innerHTML = buttons.map((btn, i) => {
+      const letter = (btn.name || btn.url).trim().charAt(0).toUpperCase();
+      return `
+        <div class="btn-item">
+          <div class="btn-item-icon">${letter}</div>
+          <div class="btn-item-info">
+            <div class="btn-item-name">${escHtml(btn.name || '—')}</div>
+            <div class="btn-item-url">${escHtml(btn.url)}</div>
+          </div>
+          <button class="del-btn" onclick="deleteButton(${i})" title="Remove">🗑</button>
+        </div>`;
+    }).join('');
+  }
+
+  /* ── Add ── */
+  function addButton() {
+    const nameEl = document.getElementById('inp-name');
+    const urlEl  = document.getElementById('inp-url');
+    const name = nameEl.value.trim();
+    let   url  = urlEl.value.trim();
+
+    if (!url) { shake(urlEl); return; }
+    if (!/^https?:\/\//i.test(url)) { url = 'https://' + url; }
+
+    const buttons = load();
+    buttons.push({ name: name || url, url });
+    save(buttons);
+
+    nameEl.value = '';
+    urlEl.value  = '';
+
+    render();
+    renderList();
+  }
+
+  /* ── Delete ── */
+  function deleteButton(index) {
+    const buttons = load();
+    buttons.splice(index, 1);
+    save(buttons);
+    render();
+    renderList();
+  }
+
+  /* ── Modal ── */
+  function openSettings()  { document.getElementById('overlay').classList.add('open'); renderList(); }
+  function closeSettings() { document.getElementById('overlay').classList.remove('open'); }
+  function handleOverlayClick(e) { if (e.target === document.getElementById('overlay')) closeSettings(); }
+
+  /* ── Allow Enter key ── */
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeSettings();
+    if (e.key === 'Enter' && document.getElementById('overlay').classList.contains('open')) addButton();
+  });
+
+  /* ── Shake animation for validation ── */
+  function shake(el) {
+    el.style.borderColor = 'var(--danger)';
+    el.style.transition = 'transform .07s';
+    let n = 0;
+    const iv = setInterval(() => {
+      el.style.transform = `translateX(${n % 2 === 0 ? 5 : -5}px)`;
+      if (++n > 5) { clearInterval(iv); el.style.transform = ''; el.focus(); }
+    }, 70);
+    setTimeout(() => { el.style.borderColor = ''; }, 900);
+  }
+
+  /* ── Escape HTML ── */
+  function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  /* ── Init ── */
+  render();
+</script>
+</body>
+</html>
